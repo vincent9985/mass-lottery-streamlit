@@ -4,33 +4,48 @@ import time
 import pandas as pd
 from datetime import date
 
-st.set_page_config(page_title="Mass Lottery Winners Scraper", layout="centered")
-st.title("Mass Lottery Winners Scraper")
+# ---------------- Page setup ----------------
+st.set_page_config(page_title="Mass Lottery Winners", layout="wide")
+st.title("Mass Lottery Winners")
 
-st.markdown(
-    "Cities are optional. Leave blank to fetch all cities. "
-    "Date filter is always applied. This app will show the exact request URL used."
+st.caption(
+    "Pull winner data from MassLottery, then explore trends by city, retailer, game, and time. "
+    "Cities are optional, leave blank for all cities."
 )
 
-cities_input = st.text_input("Cities (optional, comma separated)", value="")
-date_from = st.date_input("Date From", value=date(2025, 1, 1))
-date_to = st.date_input("Date To", value=date.today())
-run = st.button("Run Scraper")
+# ---------------- Sidebar controls ----------------
+with st.sidebar:
+    st.header("Filters")
 
-log_box = st.empty()
-progress_bar = st.progress(0)
-debug_box = st.empty()
+    cities_input = st.text_area(
+        "Cities (optional, comma separated)",
+        value="Quincy, N Quincy",
+        height=70,
+        help="Example: Quincy, N Quincy. Leave blank for all cities."
+    )
 
-def log(msg: str):
-    log_box.text(msg)
+    date_from = st.date_input("Date From", value=date(2024, 1, 1))
+    date_to = st.date_input("Date To", value=date(2026, 1, 8))
 
+    include_prize_filter = st.checkbox(
+        "Only include prizes $600+ (site tiers)",
+        value=True,
+        help="If unchecked, you will pull all prize amounts the API returns (may be much larger)."
+    )
+
+    run = st.button("Run", use_container_width=True)
+
+# ---------------- Constants ----------------
 SESSION = requests.Session()
 API_URL = "https://www.masslottery.com/api/v1/winners/query"
-
-PRIZE_AMOUNTS = "600-4999,5000-9999,10000-24999,25000-49999,50000-99999,100000-999999,1000000-"
-
+PRIZE_AMOUNTS_SITE = "600-4999,5000-9999,10000-24999,25000-49999,50000-99999,100000-999999,1000000-"
 PAGE_SIZE = 200
 MAX_RETRIES = 3
+
+# ---------------- Helpers ----------------
+status = st.empty()
+progress_bar = st.progress(0)
+debug_box = st.empty()
 
 def fetch_page(params: dict, start_index: int):
     p = dict(params)
@@ -45,6 +60,34 @@ def fetch_page(params: dict, start_index: int):
         raise Exception("Bad response, missing keys")
     return data, r.url
 
+def bucketize(x):
+    try:
+        x = float(x)
+    except Exception:
+        return "Unknown"
+    if x < 100:
+        return "< $100"
+    if x < 300:
+        return "$100 - $299"
+    if x < 600:
+        return "$300 - $599"
+    if x < 1000:
+        return "$600 - $999"
+    if x < 5000:
+        return "$1k - $4,999"
+    if x < 10000:
+        return "$5k - $9,999"
+    if x < 25000:
+        return "$10k - $24,999"
+    if x < 50000:
+        return "$25k - $49,999"
+    if x < 100000:
+        return "$50k - $99,999"
+    if x < 1000000:
+        return "$100k - $999,999"
+    return "$1M+"
+
+# ---------------- Main ----------------
 if run:
     if date_to < date_from:
         st.error("Date To must be on or after Date From.")
@@ -55,22 +98,22 @@ if run:
     params = {
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
-        "prize_amounts": PRIZE_AMOUNTS,
         "sort": "newestFirst",
     }
+    if include_prize_filter:
+        params["prize_amounts"] = PRIZE_AMOUNTS_SITE
     if cities:
         params["cities"] = ",".join(cities)
 
-    log("Starting scrape...")
+    status.info("Starting scrape…")
     progress_bar.progress(0)
 
-    # First page
     first, first_url = fetch_page(params, 0)
     total = int(first["totalNumberOfWinners"])
     all_rows = list(first["pageOfWinners"])
 
     debug_box.code(first_url, language="text")
-    log(f"Total winners reported by API: {total}")
+    status.info(f"Total winners reported by API: {total:,}")
 
     offsets = list(range(PAGE_SIZE, total, PAGE_SIZE))
 
@@ -92,10 +135,10 @@ if run:
 
         fetched_so_far = min(start + PAGE_SIZE, total)
         progress_bar.progress(fetched_so_far / max(total, 1))
-        log(f"Fetched {fetched_so_far} / {total}")
-        time.sleep(0.03)
+        status.info(f"Fetched {fetched_so_far:,} / {total:,}")
+        time.sleep(0.02)
 
-    # Dedup
+    # Deduplicate
     seen = set()
     deduped = []
     for r in all_rows:
@@ -113,167 +156,126 @@ if run:
 
     df = pd.DataFrame(deduped)
 
-    # Show actual date range returned
-    if not df.empty and "date_of_win" in df.columns:
-        df_dates = pd.to_datetime(df["date_of_win"], errors="coerce")
-        min_d = df_dates.min()
-        max_d = df_dates.max()
-        st.info(
-            f"Returned date_of_win range: "
-            f"{min_d.date() if pd.notna(min_d) else 'N/A'} to {max_d.date() if pd.notna(max_d) else 'N/A'}"
-        )
+    if df.empty:
+        st.warning("No rows returned.")
+        st.stop()
 
-    log(f"Done. Final rows: {len(df)}")
-    progress_bar.progress(1.0)
+    # Clean types
+    df["prize_amount_usd"] = pd.to_numeric(df.get("prize_amount_usd"), errors="coerce")
+    df["date_of_win"] = pd.to_datetime(df.get("date_of_win"), errors="coerce")
+    df["weekday"] = df["date_of_win"].dt.day_name()
+    df["month"] = df["date_of_win"].dt.to_period("M").astype(str)
+    df["prize_bucket"] = df["prize_amount_usd"].apply(bucketize)
 
-    # ---------------- ANALYSIS SECTION (INSERTED HERE) ----------------
-    with st.expander("Analysis", expanded=True):
-        st.subheader("Quick stats")
-
-        if df.empty:
-            st.warning("No rows to analyze.")
-        else:
-            # Make sure types are correct
-            if "prize_amount_usd" in df.columns:
-                df["prize_amount_usd"] = pd.to_numeric(df["prize_amount_usd"], errors="coerce")
-
-            if "date_of_win" in df.columns:
-                df["date_of_win"] = pd.to_datetime(df["date_of_win"], errors="coerce")
-                df["weekday"] = df["date_of_win"].dt.day_name()
-                df["month"] = df["date_of_win"].dt.to_period("M").astype(str)
-
-            total_rows = len(df)
-            total_payout = float(df["prize_amount_usd"].sum(skipna=True)) if "prize_amount_usd" in df.columns else 0.0
-            median_payout = float(df["prize_amount_usd"].median(skipna=True)) if "prize_amount_usd" in df.columns else 0.0
-            unique_retailers = int(df["retailer"].nunique(dropna=True)) if "retailer" in df.columns else 0
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Rows", f"{total_rows:,}")
-            c2.metric("Total payout", f"${total_payout:,.0f}")
-            c3.metric("Median prize", f"${median_payout:,.0f}")
-            c4.metric("Unique retailers", f"{unique_retailers:,}")
-
-            st.divider()
-
-            # Prize buckets, very lottery-relevant
-            st.subheader("Prize buckets")
-            def bucketize(x):
-                try:
-                    x = float(x)
-                except Exception:
-                    return "Unknown"
-                if x < 1000:
-                    return "< $1k"
-                if x < 5000:
-                    return "$1k - $4,999"
-                if x < 10000:
-                    return "$5k - $9,999"
-                if x < 25000:
-                    return "$10k - $24,999"
-                if x < 50000:
-                    return "$25k - $49,999"
-                if x < 100000:
-                    return "$50k - $99,999"
-                if x < 1000000:
-                    return "$100k - $999,999"
-                return "$1M+"
-
-            if "prize_amount_usd" in df.columns:
-                df["prize_bucket"] = df["prize_amount_usd"].apply(bucketize)
-                bucket_stats = (
-                    df.groupby("prize_bucket")
-                    .agg(
-                        wins=("prize_amount_usd", "count"),
-                        total_payout=("prize_amount_usd", "sum"),
-                        median_payout=("prize_amount_usd", "median"),
-                    )
-                    .sort_values("wins", ascending=False)
-                )
-                st.bar_chart(bucket_stats["wins"])
-                st.dataframe(bucket_stats)
-
-            st.divider()
-
-            # Wins by city
-            st.subheader("Wins by city")
-            if "retailer_location" in df.columns and "prize_amount_usd" in df.columns:
-                city_stats = (
-                    df.groupby("retailer_location")
-                    .agg(
-                        wins=("prize_amount_usd", "count"),
-                        total_payout=("prize_amount_usd", "sum"),
-                        avg_payout=("prize_amount_usd", "mean"),
-                    )
-                    .sort_values("wins", ascending=False)
-                )
-                st.dataframe(city_stats.head(50))
-
-            # Top retailers
-            st.subheader("Top winning retailers")
-            if "retailer" in df.columns and "prize_amount_usd" in df.columns:
-                retailer_stats = (
-                    df.groupby("retailer")
-                    .agg(
-                        wins=("prize_amount_usd", "count"),
-                        total_payout=("prize_amount_usd", "sum"),
-                        avg_payout=("prize_amount_usd", "mean"),
-                    )
-                    .sort_values("wins", ascending=False)
-                )
-                st.dataframe(retailer_stats.head(25))
-
-            # Games that pay out most often
-            st.subheader("Games that pay out most often")
-            if "name" in df.columns and "prize_amount_usd" in df.columns:
-                game_stats = (
-                    df.groupby("name")
-                    .agg(
-                        wins=("prize_amount_usd", "count"),
-                        median_payout=("prize_amount_usd", "median"),
-                        avg_payout=("prize_amount_usd", "mean"),
-                    )
-                    .sort_values("wins", ascending=False)
-                )
-                st.dataframe(game_stats.head(25))
-
-            st.divider()
-
-            # Day of week pattern
-            st.subheader("Day of week pattern")
-            if "weekday" in df.columns and "prize_amount_usd" in df.columns:
-                order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                weekday_stats = (
-                    df.groupby("weekday")
-                    .agg(
-                        wins=("prize_amount_usd", "count"),
-                        avg_payout=("prize_amount_usd", "mean"),
-                    )
-                    .reindex(order)
-                )
-                st.bar_chart(weekday_stats["wins"])
-                st.dataframe(weekday_stats)
-
-            # Monthly trend
-            st.subheader("Monthly trend")
-            if "month" in df.columns and "prize_amount_usd" in df.columns:
-                monthly = (
-                    df.groupby("month")
-                    .agg(
-                        wins=("prize_amount_usd", "count"),
-                        total_payout=("prize_amount_usd", "sum"),
-                    )
-                    .sort_index()
-                )
-                st.line_chart(monthly["wins"])
-                st.dataframe(monthly)
-
-    # ---------------- EXPORT + RAW PREVIEW ----------------
-    st.download_button(
-        "Download CSV",
-        data=df.to_csv(index=False),
-        file_name="masslottery_winners.csv",
-        mime="text/csv",
+    min_d = df["date_of_win"].min()
+    max_d = df["date_of_win"].max()
+    status.success("Done.")
+    st.info(
+        f"Returned date range: {min_d.date() if pd.notna(min_d) else 'N/A'} to {max_d.date() if pd.notna(max_d) else 'N/A'}"
     )
 
-    st.subheader("Preview")
-    st.dataframe(df.head(50))
+    # ---------------- Pretty KPI row ----------------
+    total_rows = len(df)
+    total_payout = float(df["prize_amount_usd"].sum(skipna=True))
+    median_payout = float(df["prize_amount_usd"].median(skipna=True))
+    unique_retailers = int(df["retailer"].nunique(dropna=True))
+    unique_cities = int(df["retailer_location"].nunique(dropna=True))
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Rows", f"{total_rows:,}")
+    k2.metric("Total payout", f"${total_payout:,.0f}")
+    k3.metric("Median prize", f"${median_payout:,.0f}")
+    k4.metric("Unique retailers", f"{unique_retailers:,}")
+    k5.metric("Unique cities", f"{unique_cities:,}")
+
+    st.divider()
+
+    # ---------------- Tabs for clean flow ----------------
+    tab_overview, tab_places, tab_games, tab_time, tab_data = st.tabs(
+        ["Overview", "Places", "Games", "Time", "Raw data"]
+    )
+
+    with tab_overview:
+        st.subheader("Prize bucket mix")
+        bucket_stats = (
+            df.groupby("prize_bucket")
+            .agg(
+                wins=("prize_amount_usd", "count"),
+                total_payout=("prize_amount_usd", "sum"),
+                median_payout=("prize_amount_usd", "median"),
+            )
+            .sort_values("wins", ascending=False)
+        )
+        st.bar_chart(bucket_stats["wins"])
+        st.dataframe(bucket_stats, use_container_width=True)
+
+    with tab_places:
+        st.subheader("Wins by city")
+        city_stats = (
+            df.groupby("retailer_location")
+            .agg(
+                wins=("prize_amount_usd", "count"),
+                total_payout=("prize_amount_usd", "sum"),
+                avg_payout=("prize_amount_usd", "mean"),
+            )
+            .sort_values("wins", ascending=False)
+        )
+        st.dataframe(city_stats, use_container_width=True)
+
+        st.subheader("Top winning retailers")
+        retailer_stats = (
+            df.groupby("retailer")
+            .agg(
+                wins=("prize_amount_usd", "count"),
+                total_payout=("prize_amount_usd", "sum"),
+                avg_payout=("prize_amount_usd", "mean"),
+            )
+            .sort_values("wins", ascending=False)
+        )
+        st.dataframe(retailer_stats.head(50), use_container_width=True)
+
+    with tab_games:
+        st.subheader("Games that pay out most often")
+        game_stats = (
+            df.groupby("name")
+            .agg(
+                wins=("prize_amount_usd", "count"),
+                median_payout=("prize_amount_usd", "median"),
+                avg_payout=("prize_amount_usd", "mean"),
+            )
+            .sort_values("wins", ascending=False)
+        )
+        st.dataframe(game_stats.head(50), use_container_width=True)
+
+    with tab_time:
+        st.subheader("Wins by day of week")
+        order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        weekday_stats = (
+            df.groupby("weekday")
+            .agg(wins=("prize_amount_usd", "count"), avg_payout=("prize_amount_usd", "mean"))
+            .reindex(order)
+        )
+        st.bar_chart(weekday_stats["wins"])
+        st.dataframe(weekday_stats, use_container_width=True)
+
+        st.subheader("Monthly trend")
+        monthly = (
+            df.groupby("month")
+            .agg(wins=("prize_amount_usd", "count"), total_payout=("prize_amount_usd", "sum"))
+            .sort_index()
+        )
+        st.line_chart(monthly["wins"])
+        st.dataframe(monthly, use_container_width=True)
+
+    with tab_data:
+        st.subheader("Download")
+        st.download_button(
+            "Download CSV",
+            data=df.to_csv(index=False),
+            file_name="masslottery_winners.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+        st.subheader("Preview")
+        st.dataframe(df, use_container_width=True, height=520)
