@@ -140,22 +140,11 @@ if run:
         time.sleep(0.02)
 
     # Deduplicate
-    seen = set()
-    deduped = []
-    for r in all_rows:
-        key = (
-            r.get("date_of_win"),
-            r.get("prize_amount_usd"),
-            r.get("name"),
-            r.get("retailer"),
-            r.get("retailer_location"),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(r)
+    # Keep all rows (match site count)
+    df = pd.DataFrame(all_rows)
 
-    df = pd.DataFrame(deduped)
+    # Optional: only remove exact duplicate JSON rows (very conservative)
+    df = df.drop_duplicates()
 
     if df.empty:
         st.warning("No rows returned.")
