@@ -11,10 +11,15 @@ st.set_page_config(
 
 st.title("Mass Lottery Winners Scraper")
 
+st.markdown(
+    "Leave **Cities** blank to fetch **all cities**. "
+    "Enter comma-separated cities (e.g. `Quincy, N Quincy`) to filter."
+)
+
 # ---------------- UI ----------------
 cities_input = st.text_input(
-    "Cities (comma separated)",
-    value="Quincy, N Quincy"
+    "Cities (optional, comma separated)",
+    value=""
 )
 
 date_from = st.date_input(
@@ -48,25 +53,29 @@ def fetch_page(base_url, start_index, page_size):
 
 # ---------------- Main Logic ----------------
 if run:
-    if not cities_input.strip():
-        st.error("Please enter at least one city")
-        st.stop()
-
-    cities = [c.strip() for c in cities_input.split(",") if c.strip()]
-    cities_param = ",".join(cities)
-
     log("Starting scrape...")
     progress_bar.progress(0)
 
+    # Parse cities
+    cities = [c.strip() for c in cities_input.split(",") if c.strip()]
+    cities_param = ",".join(cities)
+
+    # ---- Build BASE safely ----
     BASE = (
         "https://www.masslottery.com/api/v1/winners/query"
         f"?date_from={date_from}"
         f"&date_to={date_to}"
         "&prize_amounts=600-4999,5000-9999,10000-24999,25000-49999,"
         "50000-99999,100000-999999,1000000-"
-        f"&cities={cities_param}"
-        "&sort=newestFirst"
     )
+
+    if cities_param:
+        BASE += f"&cities={cities_param}"
+        log(f"Filtering cities: {cities_param}")
+    else:
+        log("No city filter applied (ALL cities)")
+
+    BASE += "&sort=newestFirst"
 
     PAGE_SIZE = 200
     MAX_RETRIES = 3
