@@ -175,6 +175,10 @@ if run:
     )
 
     # ---------------- Pretty KPI row ----------------
+    def fmt_dollar(x):
+        return f"${x:,.0f}" if pd.notna(x) else "—"
+    def fmt_count(x):
+        return f"{int(x):,}" if pd.notna(x) else "—"
     total_rows = len(df)
     total_payout = float(df["prize_amount_usd"].sum(skipna=True))
     median_payout = float(df["prize_amount_usd"].median(skipna=True))
