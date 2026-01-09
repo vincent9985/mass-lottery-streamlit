@@ -87,6 +87,15 @@ def bucketize(x):
         return "$100k - $999,999"
     return "$1M+"
 
+def fmt_dollar(x):
+    return f"${x:,.0f}" if pd.notna(x) else "—"
+
+def fmt_count(x):
+    try:
+        return f"{int(x):,}"
+    except Exception:
+        return "—"
+
 # ---------------- Main ----------------
 if run:
     if date_to < date_from:
@@ -174,33 +183,30 @@ if run:
         f"Returned date range: {min_d.date() if pd.notna(min_d) else 'N/A'} to {max_d.date() if pd.notna(max_d) else 'N/A'}"
     )
 
-    # ---------------- Pretty KPI row ----------------
-    def fmt_dollar(x):
-        return f"${x:,.0f}" if pd.notna(x) else "—"
-    def fmt_count(x):
-        return f"{int(x):,}" if pd.notna(x) else "—"
+    # ---------------- Pretty KPI row (formatted) ----------------
     total_rows = len(df)
-    total_payout = float(df["prize_amount_usd"].sum(skipna=True))
-    median_payout = float(df["prize_amount_usd"].median(skipna=True))
-    unique_retailers = int(df["retailer"].nunique(dropna=True))
-    unique_cities = int(df["retailer_location"].nunique(dropna=True))
+    total_payout = df["prize_amount_usd"].sum(skipna=True)
+    median_payout = df["prize_amount_usd"].median(skipna=True)
+    unique_retailers = df["retailer"].nunique(dropna=True) if "retailer" in df.columns else 0
+    unique_cities = df["retailer_location"].nunique(dropna=True) if "retailer_location" in df.columns else 0
 
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Rows", f"{total_rows:,}")
-    k2.metric("Total payout", f"${total_payout:,.0f}")
-    k3.metric("Median prize", f"${median_payout:,.0f}")
-    k4.metric("Unique retailers", f"{unique_retailers:,}")
-    k5.metric("Unique cities", f"{unique_cities:,}")
+    k1.metric("Wins", fmt_count(total_rows))
+    k2.metric("Total payout", fmt_dollar(total_payout))
+    k3.metric("Median prize", fmt_dollar(median_payout))
+    k4.metric("Retailers", fmt_count(unique_retailers))
+    k5.metric("Cities", fmt_count(unique_cities))
 
     st.divider()
 
-    # ---------------- Tabs for clean flow ----------------
+    # ---------------- Tabs ----------------
     tab_overview, tab_places, tab_games, tab_time, tab_data = st.tabs(
         ["Overview", "Places", "Games", "Time", "Raw data"]
     )
 
     with tab_overview:
         st.subheader("Prize bucket mix")
+
         bucket_stats = (
             df.groupby("prize_bucket")
             .agg(
@@ -210,11 +216,18 @@ if run:
             )
             .sort_values("wins", ascending=False)
         )
+
         st.bar_chart(bucket_stats["wins"])
-        st.dataframe(bucket_stats, use_container_width=True)
+
+        bucket_display = bucket_stats.copy()
+        bucket_display["wins"] = bucket_display["wins"].map(lambda x: f"{x:,}")
+        bucket_display["total_payout"] = bucket_display["total_payout"].map(fmt_dollar)
+        bucket_display["median_payout"] = bucket_display["median_payout"].map(fmt_dollar)
+        st.dataframe(bucket_display, use_container_width=True)
 
     with tab_places:
         st.subheader("Wins by city")
+
         city_stats = (
             df.groupby("retailer_location")
             .agg(
@@ -224,9 +237,15 @@ if run:
             )
             .sort_values("wins", ascending=False)
         )
-        st.dataframe(city_stats, use_container_width=True)
+
+        city_display = city_stats.copy()
+        city_display["wins"] = city_display["wins"].map(lambda x: f"{x:,}")
+        city_display["total_payout"] = city_display["total_payout"].map(fmt_dollar)
+        city_display["avg_payout"] = city_display["avg_payout"].map(fmt_dollar)
+        st.dataframe(city_display, use_container_width=True)
 
         st.subheader("Top winning retailers")
+
         retailer_stats = (
             df.groupby("retailer")
             .agg(
@@ -236,10 +255,16 @@ if run:
             )
             .sort_values("wins", ascending=False)
         )
-        st.dataframe(retailer_stats.head(50), use_container_width=True)
+
+        retailer_display = retailer_stats.copy()
+        retailer_display["wins"] = retailer_display["wins"].map(lambda x: f"{x:,}")
+        retailer_display["total_payout"] = retailer_display["total_payout"].map(fmt_dollar)
+        retailer_display["avg_payout"] = retailer_display["avg_payout"].map(fmt_dollar)
+        st.dataframe(retailer_display.head(50), use_container_width=True)
 
     with tab_games:
         st.subheader("Games that pay out most often")
+
         game_stats = (
             df.groupby("name")
             .agg(
@@ -249,27 +274,44 @@ if run:
             )
             .sort_values("wins", ascending=False)
         )
-        st.dataframe(game_stats.head(50), use_container_width=True)
+
+        game_display = game_stats.copy()
+        game_display["wins"] = game_display["wins"].map(lambda x: f"{x:,}")
+        game_display["median_payout"] = game_display["median_payout"].map(fmt_dollar)
+        game_display["avg_payout"] = game_display["avg_payout"].map(fmt_dollar)
+        st.dataframe(game_display.head(50), use_container_width=True)
 
     with tab_time:
         st.subheader("Wins by day of week")
+
         order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         weekday_stats = (
             df.groupby("weekday")
             .agg(wins=("prize_amount_usd", "count"), avg_payout=("prize_amount_usd", "mean"))
             .reindex(order)
         )
+
         st.bar_chart(weekday_stats["wins"])
-        st.dataframe(weekday_stats, use_container_width=True)
+
+        weekday_display = weekday_stats.copy()
+        weekday_display["wins"] = weekday_display["wins"].map(lambda x: f"{x:,}")
+        weekday_display["avg_payout"] = weekday_display["avg_payout"].map(fmt_dollar)
+        st.dataframe(weekday_display, use_container_width=True)
 
         st.subheader("Monthly trend")
+
         monthly = (
             df.groupby("month")
             .agg(wins=("prize_amount_usd", "count"), total_payout=("prize_amount_usd", "sum"))
             .sort_index()
         )
+
         st.line_chart(monthly["wins"])
-        st.dataframe(monthly, use_container_width=True)
+
+        monthly_display = monthly.copy()
+        monthly_display["wins"] = monthly_display["wins"].map(lambda x: f"{x:,}")
+        monthly_display["total_payout"] = monthly_display["total_payout"].map(fmt_dollar)
+        st.dataframe(monthly_display, use_container_width=True)
 
     with tab_data:
         st.subheader("Download")
