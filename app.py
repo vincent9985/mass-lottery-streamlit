@@ -27,18 +27,11 @@ with st.sidebar:
     date_from = st.date_input("Date From", value=date(2024, 1, 1))
     date_to = st.date_input("Date To", value=date(2026, 1, 8))
 
-    include_prize_filter = st.checkbox(
-        "Only include prizes $600+ (site tiers)",
-        value=True,
-        help="If unchecked, you will pull all prize amounts the API returns (may be much larger)."
-    )
-
     run = st.button("Run", use_container_width=True)
 
 # ---------------- Constants ----------------
 SESSION = requests.Session()
 API_URL = "https://www.masslottery.com/api/v1/winners/query"
-PRIZE_AMOUNTS_SITE = "600-4999,5000-9999,10000-24999,25000-49999,50000-99999,100000-999999,1000000-"
 PAGE_SIZE = 200
 MAX_RETRIES = 3
 
@@ -104,13 +97,12 @@ if run:
 
     cities = [c.strip() for c in cities_input.split(",") if c.strip()]
 
+    # NOTE: no prize_amounts param, this pulls ALL prize amounts
     params = {
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
         "sort": "newestFirst",
     }
-    if include_prize_filter:
-        params["prize_amounts"] = PRIZE_AMOUNTS_SITE
     if cities:
         params["cities"] = ",".join(cities)
 
@@ -183,7 +175,7 @@ if run:
         f"Returned date range: {min_d.date() if pd.notna(min_d) else 'N/A'} to {max_d.date() if pd.notna(max_d) else 'N/A'}"
     )
 
-    # ---------------- Pretty KPI row (formatted) ----------------
+    # ---------------- KPI row (formatted) ----------------
     total_rows = len(df)
     total_payout = df["prize_amount_usd"].sum(skipna=True)
     median_payout = df["prize_amount_usd"].median(skipna=True)
