@@ -143,9 +143,6 @@ if run:
     # Keep all rows (match site count)
     df = pd.DataFrame(all_rows)
 
-    # Optional: only remove exact duplicate JSON rows (very conservative)
-    df = df.drop_duplicates()
-
     if df.empty:
         st.warning("No rows returned.")
         st.stop()
