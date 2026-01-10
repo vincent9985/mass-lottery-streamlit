@@ -3,6 +3,8 @@ import requests
 import time
 import pandas as pd
 from datetime import date
+from cities import ALL_CITIES
+
 
 # ---------------- Page setup ----------------
 st.set_page_config(page_title="Mass Lottery Winners", layout="wide")
@@ -17,11 +19,13 @@ st.caption(
 with st.sidebar:
     st.header("Filters")
 
-    cities_input = st.text_area(
-        "Cities (optional, comma separated)",
-        value="Quincy, N Quincy",
-        height=70
+    cities_selected = st.multiselect(
+        "City",
+        options=ALL_CITIES,
+        default=["Quincy", "N Quincy"],
+        help="Select one or more cities. Leave empty for all cities."
     )
+
 
     date_from = st.date_input("Date From", value=date(2024, 1, 1))
     date_to = st.date_input("Date To", value=date(2026, 1, 8))
