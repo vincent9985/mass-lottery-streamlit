@@ -318,13 +318,14 @@ if run:
     with tab_time:
         order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         weekday_stats = (
-            df.groupby("weekday")
-            .agg(
-                wins=("prize_amount_usd", "count"),
-                avg_payout=("prize_amount_usd", "mean"),
-            )
-            .reindex(order)
-        )
+    df.groupby("weekday")
+      .agg(
+          wins=("prize_amount_usd", "count"),
+          avg_payout=("prize_amount_usd", "mean"),
+      )
+      .reindex(order, fill_value=0)
+)
+
 
         st.bar_chart(weekday_stats["wins"])
 
