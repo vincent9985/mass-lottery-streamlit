@@ -88,7 +88,10 @@ if run:
         st.error("Date To must be on or after Date From.")
         st.stop()
 
-    cities = [c.strip() for c in cities_input.split(",") if c.strip()]
+    # Cities filter (optional)
+if cities_selected:
+    params["cities"] = ",".join(cities_selected)
+
 
     params = {
         "date_from": date_from.isoformat(),
