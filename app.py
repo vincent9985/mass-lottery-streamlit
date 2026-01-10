@@ -327,7 +327,12 @@ if run:
         )
 
 
-        st.bar_chart(weekday_stats["wins"])
+        weekday_plot = weekday_stats.reset_index().rename(columns={"index": "weekday"})
+        weekday_plot["weekday"] = pd.Categorical(weekday_plot["weekday"], categories=order, ordered=True)
+        weekday_plot = weekday_plot.sort_values("weekday")
+
+        st.bar_chart(weekday_plot.set_index("weekday")["wins"])
+
 
         show = weekday_stats.copy()
         show["wins"] = show["wins"].map(lambda x: f"{x:,}")
