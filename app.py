@@ -88,18 +88,13 @@ if run:
         st.error("Date To must be on or after Date From.")
         st.stop()
 
-    # Cities filter (optional)
-if cities_selected:
-    params["cities"] = ",".join(cities_selected)
-
-
     params = {
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
         "sort": "newestFirst",
     }
-    if cities:
-        params["cities"] = ",".join(cities)
+    if cities_selected:
+        params["cities"] = ",".join(cities_selected)
 
     status.info("Starting scrape…")
     progress_bar.progress(0)
