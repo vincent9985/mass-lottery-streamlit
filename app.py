@@ -27,7 +27,7 @@ with st.sidebar:
     )
 
 
-    date_from = st.date_input("Date From", value=date(2024, 1, 1))
+    date_from = st.date_input("Date From", value=date(2026, 1, 1))
     date_to = st.date_input("Date To", value=date(2026, 1, 8))
 
     run = st.button("Run", use_container_width=True)
