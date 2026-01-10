@@ -4,6 +4,8 @@ import time
 import pandas as pd
 from datetime import date
 from cities import ALL_CITIES
+from datetime import date, timedelta
+
 
 
 # ---------------- Page setup ----------------
@@ -15,6 +17,28 @@ st.caption(
     "Cities are optional, leave blank for all cities."
 )
 
+# ---------------- date filter ----------------
+
+def first_day_of_month(d: date) -> date:
+    return d.replace(day=1)
+
+def add_months(d: date, months: int) -> date:
+    y = d.year + (d.month - 1 + months) // 12
+    m = (d.month - 1 + months) % 12 + 1
+    day = min(d.day, [31,
+        29 if (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)) else 28,
+        31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    ][m - 1])
+    return date(y, m, day)
+
+def last_day_of_month(d: date) -> date:
+    return add_months(first_day_of_month(d), 1) - timedelta(days=1)
+
+def quarter_start(d: date) -> date:
+    q = (d.month - 1) // 3  # 0..3
+    m = q * 3 + 1
+    return date(d.year, m, 1)
+    
 # ---------------- Sidebar ----------------
 with st.sidebar:
     st.header("Filters")
@@ -27,8 +51,56 @@ with st.sidebar:
     )
 
 
-    date_from = st.date_input("Date From", value=date(2026, 1, 1))
-    date_to = st.date_input("Date To", value=date(2026, 1, 8))
+    today = date.today()
+
+preset = st.selectbox(
+    "Date range preset",
+    [
+        "Custom",
+        "Last 7 days",
+        "Last 30 days",
+        "This month",
+        "Last month",
+        "This quarter",
+        "Last quarter",
+        "This year",
+        "Last year",
+    ],
+    index=0
+)
+
+# preset dates
+if preset == "Last 7 days":
+    preset_from, preset_to = today - timedelta(days=7), today
+elif preset == "Last 30 days":
+    preset_from, preset_to = today - timedelta(days=30), today
+elif preset == "This month":
+    preset_from, preset_to = first_day_of_month(today), today
+elif preset == "Last month":
+    lm = add_months(today, -1)
+    preset_from, preset_to = first_day_of_month(lm), last_day_of_month(lm)
+elif preset == "This quarter":
+    preset_from, preset_to = quarter_start(today), today
+elif preset == "Last quarter":
+    this_q_start = quarter_start(today)
+    last_q_end = this_q_start - timedelta(days=1)
+    preset_from, preset_to = quarter_start(last_q_end), last_q_end
+elif preset == "This year":
+    preset_from, preset_to = date(today.year, 1, 1), today
+elif preset == "Last year":
+    preset_from, preset_to = date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
+else:
+    preset_from, preset_to = None, None
+
+date_from = st.date_input(
+    "Date From",
+    value=(preset_from if preset_from else date(2026, 1, 1))
+)
+date_to = st.date_input(
+    "Date To",
+    value=(preset_to if preset_to else date(2026, 1, 8))
+)
+
 
     run = st.button("Run", use_container_width=True)
 
@@ -41,6 +113,7 @@ MAX_RETRIES = 3
 status = st.empty()
 progress_bar = st.progress(0)
 debug_box = st.empty()
+
 
 # ---------------- Helpers ----------------
 def fetch_page(params: dict, start_index: int):
