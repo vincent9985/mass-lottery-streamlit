@@ -50,57 +50,55 @@ with st.sidebar:
         help="Select one or more cities. Leave empty for all cities."
     )
 
-
     today = date.today()
 
-preset = st.selectbox(
-    "Date range preset",
-    [
-        "Custom",
-        "Last 7 days",
-        "Last 30 days",
-        "This month",
-        "Last month",
-        "This quarter",
-        "Last quarter",
-        "This year",
-        "Last year",
-    ],
-    index=0
-)
+    preset = st.selectbox(
+        "Date range preset",
+        [
+            "Custom",
+            "Last 7 days",
+            "Last 30 days",
+            "This month",
+            "Last month",
+            "This quarter",
+            "Last quarter",
+            "This year",
+            "Last year",
+        ],
+        index=0
+    )
 
-# preset dates
-if preset == "Last 7 days":
-    preset_from, preset_to = today - timedelta(days=7), today
-elif preset == "Last 30 days":
-    preset_from, preset_to = today - timedelta(days=30), today
-elif preset == "This month":
-    preset_from, preset_to = first_day_of_month(today), today
-elif preset == "Last month":
-    lm = add_months(today, -1)
-    preset_from, preset_to = first_day_of_month(lm), last_day_of_month(lm)
-elif preset == "This quarter":
-    preset_from, preset_to = quarter_start(today), today
-elif preset == "Last quarter":
-    this_q_start = quarter_start(today)
-    last_q_end = this_q_start - timedelta(days=1)
-    preset_from, preset_to = quarter_start(last_q_end), last_q_end
-elif preset == "This year":
-    preset_from, preset_to = date(today.year, 1, 1), today
-elif preset == "Last year":
-    preset_from, preset_to = date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
-else:
-    preset_from, preset_to = None, None
+    if preset == "Last 7 days":
+        preset_from, preset_to = today - timedelta(days=7), today
+    elif preset == "Last 30 days":
+        preset_from, preset_to = today - timedelta(days=30), today
+    elif preset == "This month":
+        preset_from, preset_to = first_day_of_month(today), today
+    elif preset == "Last month":
+        lm = add_months(today, -1)
+        preset_from, preset_to = first_day_of_month(lm), last_day_of_month(lm)
+    elif preset == "This quarter":
+        preset_from, preset_to = quarter_start(today), today
+    elif preset == "Last quarter":
+        this_q_start = quarter_start(today)
+        last_q_end = this_q_start - timedelta(days=1)
+        preset_from, preset_to = quarter_start(last_q_end), last_q_end
+    elif preset == "This year":
+        preset_from, preset_to = date(today.year, 1, 1), today
+    elif preset == "Last year":
+        preset_from, preset_to = date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
+    else:
+        preset_from, preset_to = None, None
 
-date_from = st.date_input(
-    "Date From",
-    value=(preset_from if preset_from else date(2026, 1, 1))
-)
-date_to = st.date_input(
-    "Date To",
-    value=(preset_to if preset_to else date(2026, 1, 8))
-)
+    date_from = st.date_input(
+        "Date From",
+        value=preset_from if preset_from else date(2026, 1, 1)
+    )
 
+    date_to = st.date_input(
+        "Date To",
+        value=preset_to if preset_to else date(2026, 1, 8)
+    )
 
     run = st.button("Run", use_container_width=True)
 
